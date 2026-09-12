@@ -99,19 +99,20 @@ class Payment(Base):
     contribution_id: Mapped[str] = mapped_column(ForeignKey("contributions.id"), nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     claimed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    evidence_type: Mapped[str] = mapped_column(String, nullable=True)  # e.g. "screenshot", "bank_ref"
+    evidence_type: Mapped[str] = mapped_column(String, nullable=True)  
     evidence_recipient_account: Mapped[str] = mapped_column(String, nullable=True)
     evidence_recipient_name: Mapped[str] = mapped_column(String, nullable=True)
     evidence_date: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     verification_note: Mapped[str] = mapped_column(Text, nullable=True)
+    member_statement: Mapped[str] = mapped_column(Text, nullable=True)  
 
     contribution: Mapped["Contribution"] = relationship(back_populates="payments")
 
 
 class DisputeStatus(str, enum.Enum):
     OPEN = "open"
-    RESOLVED_CONFIRMED = "resolved_confirmed"  
+    RESOLVED_CONFIRMED = "resolved_confirmed"   
     RESOLVED_REJECTED = "resolved_rejected"     
 
 
@@ -142,7 +143,7 @@ class ActionReceipt(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: new_id("rcpt"))
     group_id: Mapped[str] = mapped_column(ForeignKey("groups.id"), nullable=False)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    action: Mapped[str] = mapped_column(String, nullable=False)         
+    action: Mapped[str] = mapped_column(String, nullable=False)        
     facts: Mapped[str] = mapped_column(Text, nullable=False)            
     rule_applied: Mapped[str] = mapped_column(Text, nullable=False)
     decision: Mapped[str] = mapped_column(Text, nullable=False)
