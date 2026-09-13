@@ -1,11 +1,10 @@
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
 
 from app.db import SessionLocal, init_db
-from app.models import Contribution, ContributionStatus, Group, Member
+from app.models import Contribution, ContributionStatus, Group, Member, Payment
 
 MEMBER_NAMES = [
     "Chidi", "Amaka", "Ifeanyi", "Ngozi", "Tunde", "Blessing",
@@ -43,11 +42,10 @@ def run() -> None:
             name=name,
             phone=f"080{1000000 + i}",
             payout_order=i,
-            has_received_payout=(i <= 2),  
+            has_received_payout=(i <= 2), 
             is_admin=(i == 1),  
         )
         members.append(m)
-
     members[0].is_admin = False
     members[1].is_admin = True
     db.add_all(members)
@@ -79,6 +77,22 @@ def run() -> None:
         )
         contributions.append(c)
     db.add_all(contributions)
+    db.flush()
+
+    for c in contributions:
+        if c.status == ContributionStatus.PAID:
+            db.add(
+                Payment(
+                    contribution_id=c.id,
+                    amount=c.amount_paid,
+                    evidence_type="bank_transfer",
+                    evidence_recipient_account=group.registered_account_number,
+                    evidence_recipient_name=group.registered_account_name,
+                    evidence_date=cycle_due_at,
+                    verified=True,
+                    verification_note="Matches registered account, amount, and a plausible date.",
+                )
+            )
     db.commit()
 
     chidi_contribution = contributions[0]
