@@ -1,135 +1,144 @@
 # Ajo Continuity Agent
 
-**An agent that keeps an informal savings group's agreement intact — handles routine work on its own, and knows exactly when to stop and hand a decision to a human.**
+**An AI agent that keeps community savings groups running smoothly by handling routine coordination, verifying payment evidence, and knowing when a decision needs a human.**
 
-Built for the AWS Agents for Humans Hackathon · Good Neighbor Agents track
+Built for the **AWS Agents for Humans Hackathon · Good Neighbor Agents track**
 
 ![Architecture](./architecture-diagram.png)
 
 ---
 
-## The problem
+## The Problem
 
-Ajo — also called esusu, susu, or a tontine — is an informal rotating savings
-group. A fixed group of people contribute a fixed amount on a schedule, and
-take turns receiving the payout. It's one of the oldest financial coordination
-systems in the world, and it runs entirely on trust and someone's memory:
-who paid, who's late, and what happens when the evidence doesn't add up.
+Ajo, also known as esusu, susu, or a tontine, is an informal rotating savings system where members contribute a fixed amount on a schedule and take turns receiving the pooled payout.
 
-The hard part was never collecting payments. It's the exceptions: a member
-forgets, a member claims they paid and the group has no way to verify it, or
-the payment evidence itself conflicts with the group's records. Someone has
-to investigate, and someone has to decide — and that person is usually doing
-it from memory, under social pressure, with no paper trail.
+The system is simple. The coordination is not.
 
-## What it does
+Someone still has to track who paid, who is late, whether payment evidence is valid, and what happens when the records do not agree.
 
-1. **Observes** the group's real state — who owes what, and when it's due.
-2. **Checks the group's rules** — deterministically, not by asking a model to guess.
-3. **Handles routine problems on its own** — reminders for overdue contributions, verified payments recorded automatically.
-4. **Verifies submitted evidence** against the group's actual registered payment details.
-5. **Stops the moment evidence conflicts** — it does not guess who's right.
-6. **Escalates genuine exceptions to a human**, with the evidence laid out plainly.
-7. **Records every consequential action** as a tamper-evident, auditable receipt.
+The difficult cases are the exceptions. A member forgets to contribute. Someone says they paid but cannot provide matching evidence. A payment record conflicts with the evidence submitted.
 
-The story in one line: **routine → exception → evidence → decision → receipt.** AI handles the routine work. A human owns every exception.
+At that point, someone has to investigate and make a decision, often from memory, under social pressure, with little or no audit trail.
 
-## Why this is safe by design, not just by prompt
+**Ajo Continuity Agent handles the routine work and gives humans a clear, evidence-based handoff when something requires judgment.**
 
-Most of what makes this trustworthy isn't a system prompt telling the model
-to be careful — it's structural:
+## What It Does
 
-- **The database is the only source of truth.** The agent never writes a
-  financial record directly. It calls a tool; the tool calls deterministic
-  application code; the application code writes the row. Dates, overdue
-  calculations, and evidence matching are plain Python, not LLM output.
-- **Irreversible actions are gated at the framework level.** Resolving a
-  dispute and recording a payment both run through Strands' own
-  `HumanInTheLoop` intervention handler — verified directly, independent of
-  whether the model even chooses to call them, that it actually blocks
-  execution and waits for a human.
-- **Every autonomous action leaves a hash-chained receipt.** Not a
-  blockchain — a simple tamper-evident log where each receipt's hash covers
-  its own content plus the previous receipt's hash. Tested by actually
-  mutating a stored receipt and confirming the chain catches it.
-- **Two real human-decision paths, neither of which bypasses the backend.**
-  An admin can directly confirm/reject a dispute from the UI (their click
-  *is* the human decision), or the agent can attempt a gated action itself
-  and have Strands pause the run until a human responds.
+1. **Observes** the group's current state, including contributions, outstanding payments, and deadlines.
+2. **Checks the group's rules** using deterministic application logic rather than asking an LLM to calculate financial state.
+3. **Handles routine issues** such as identifying overdue contributions and processing verified payment evidence.
+4. **Verifies evidence** against the group's registered payment records.
+5. **Stops when evidence conflicts** instead of guessing which record is correct.
+6. **Escalates exceptions** to a human with the relevant evidence clearly presented.
+7. **Records consequential actions** in a tamper-evident audit trail.
 
-## Tech stack
+The workflow is simple:
 
-- **Agent:** Strands Agents SDK, running on Amazon Bedrock (Claude Sonnet 4)
-- **Backend:** FastAPI + SQLAlchemy, SQLite by default (swaps to Postgres with one env var)
-- **Frontend:** Next.js, TypeScript, Tailwind
-- **Audit trail:** custom hash-chain implementation over the action log
+**routine → exception → evidence → decision → receipt**
 
-## Getting started
+The agent handles routine coordination. Humans remain responsible for consequential decisions.
+
+## Why It's Safe by Design
+
+The safety model is built into the system architecture, not just the agent's instructions.
+
+* **The database is the source of truth.** The agent does not write financial records directly. It calls a tool, which passes through deterministic application logic before changing the database. Dates, overdue calculations, and evidence matching are handled by Python rather than generated by the LLM.
+
+* **Sensitive actions are gated.** Payment recording and dispute resolution use Strands' `HumanInTheLoop` intervention mechanism. The agent cannot complete these actions without passing through the defined approval boundary.
+
+* **Actions leave tamper-evident receipts.** Each receipt contains a hash of its own content and the previous receipt's hash, creating a verifiable chain. The implementation has been tested by modifying a stored receipt and confirming that the chain detects the change.
+
+* **Human decisions remain human decisions.** Administrators can resolve disputes directly from the interface, while agent-initiated sensitive actions pause execution and wait for human approval.
+
+## Tech Stack
+
+* **Agent:** Strands Agents SDK + Amazon Bedrock (Claude Sonnet 4)
+* **Backend:** FastAPI + SQLAlchemy + SQLite
+* **Frontend:** Next.js + TypeScript + Tailwind CSS
+* **Audit Trail:** Custom hash-chain implementation over the action log
+
+## Getting Started
 
 ### Backend
 
 ```powershell
 cd backend
+
 python -m venv venv
 venv\Scripts\activate.bat
+
 pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Fill in `.env`: enable a Claude model under AWS Console → Bedrock → Model
-access, add your AWS credentials, set `BEDROCK_MODEL_ID`. See
-`backend/.env.example` for currently active model IDs and a note on the
-`us.` cross-region-inference prefix Bedrock requires for newer models.
+Configure `.env` with your AWS credentials, enable the required Claude model in Amazon Bedrock, and set `BEDROCK_MODEL_ID`.
+
+See `backend/.env.example` for the currently configured model IDs and the required `us.` cross-region inference prefix for newer Bedrock models.
+
+Then:
 
 ```powershell
 python -m app.seed
 python -m app.run_server
 ```
 
-API docs at `http://localhost:8000/docs`. Full details, including what's
-been verified and how, in `backend/README.md`.
+API documentation is available at:
+
+`http://localhost:8000/docs`
+
+See `backend/README.md` for backend-specific details and verification notes.
 
 ### Frontend
 
 ```powershell
 cd frontend
+
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. Requires the backend running at
-`http://localhost:8000` (configurable via `NEXT_PUBLIC_API_BASE_URL`). Full
-details in `frontend/README.md`.
+Open:
+
+`http://localhost:3000`
+
+The frontend expects the backend at `http://localhost:8000` by default. Configure `NEXT_PUBLIC_API_BASE_URL` if the backend is hosted elsewhere.
+
+See `frontend/README.md` for frontend-specific details.
 
 ## Demo Mode
 
-The app ships with a seeded demo group (**Udo Ajo Circle** — 12 members,
-₦20,000/week, 48-hour grace period — all fictional data, clearly labeled as
-a demo environment). Demo Mode triggers the real backend, not a scripted
-animation:
+The application includes a seeded demo group, **Udo Ajo Circle**, with 12 fictional members contributing ₦20,000 per week and a 48-hour grace period.
 
-- **Missed payment** — routine overdue detection and reminder
-- **Member claims payment** — a claim with no evidence, agent asks for proof
-- **Valid evidence** — evidence matching group records, agent proposes recording the payment and pauses for human approval
-- **Conflicting evidence** — evidence that doesn't match, agent creates a dispute for human review
-- **Resolve dispute** — routes to the Disputes screen for the human decision
-- **Reset demo** — wipes and reseeds everything
+Demo Mode triggers the actual backend workflow rather than playing a scripted animation.
 
-## What's verified vs. known gaps
+Available scenarios:
 
-Everything above the "known gaps" line has been tested by actually running
-it — live against Bedrock, not just written and assumed correct:
+* **Missed payment** — detects an overdue contribution and initiates the appropriate routine workflow.
+* **Member claims payment** — processes a payment claim without supporting evidence and requests proof.
+* **Valid evidence** — matches submitted evidence against group records, proposes recording the payment, and pauses for human approval.
+* **Conflicting evidence** — detects a mismatch and creates a dispute for human review.
+* **Resolve dispute** — routes the case to the Disputes interface for a human decision.
+* **Reset demo** — clears and reseeds the demo environment.
 
-- All three core demo scenarios run end-to-end against a real model
-- The `HumanInTheLoop` gate tested directly (independent of model behavior) —
-  confirmed it blocks `resolve_dispute` and `record_payment` and nothing else
-- The hash chain tested by tampering with a stored receipt and confirming detection
-- The full HTTP path — frontend → FastAPI → agent → Bedrock → tools → receipt — proven live
+## Verification
 
-Known gaps: no mobile layout, the segmented week-progress visual from the
-original design isn't built, and visual fidelity to the design mockups
-hasn't been checked against a live render in this environment. Full detail
-in `frontend/README.md`.
+The core workflow has been tested end-to-end against a live Bedrock model.
+
+Verified:
+
+* Core demo scenarios execute successfully.
+* The `HumanInTheLoop` gate blocks `resolve_dispute` and `record_payment` as intended.
+* The hash-chain audit trail detects tampering with stored receipts.
+* The complete request path works from frontend → FastAPI → agent → Bedrock → tools → receipt.
+* Frontend API integrations match tested backend response structures.
+
+### Known Gaps
+
+* Mobile layouts are not implemented.
+* The segmented week-progress visualization from the original design is not implemented.
+* Visual fidelity against the design mockups has not been pixel-verified in a browser-based environment.
+
+See `frontend/README.md` for the full implementation and verification notes.
 
 ## License
 
