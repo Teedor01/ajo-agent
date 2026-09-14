@@ -1,0 +1,8 @@
+strands-agents
+sqlalchemy
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+
+boto3            
