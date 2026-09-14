@@ -37,7 +37,10 @@ app = FastAPI(title="Ajo Continuity Agent API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  
+    allow_origins=[
+    "http://localhost:3000",
+    "https://ajo-continuity-agent.vercel.app",
+],  
     allow_methods=["*"],
     allow_headers=["*"],
 )
