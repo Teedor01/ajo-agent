@@ -1,148 +1,128 @@
 # Ajo Continuity Agent — Backend
 
-Rotating-savings (ajo/esusu) group coordination agent built on the real
-Strands Agents SDK. The database is the source of truth; the agent never
-writes financial records directly — it calls tools, and tools call
-deterministic domain logic (`app/domain/`).
+Rotating-savings (ajo/esusu) group coordination agent built with the Strands Agents SDK.
 
-## Status (honest, as of this build)
+The database is the source of truth. The agent never writes financial records directly. It calls tools, which execute deterministic domain logic in `app/domain/`.
 
-**Built and verified by direct execution (no live LLM needed for this part):**
-- Full SQLAlchemy schema (`app/models.py`) — Group, Member, Contribution,
-  Payment, Dispute, ActionReceipt
-- Deterministic overdue calculation (`app/domain/overdue.py`)
-- Deterministic evidence-conflict detection (`app/domain/disputes.py`)
-- Hash-chained action receipts with tamper detection
-  (`app/domain/receipts.py`) — verified by actually mutating a stored
-  receipt and confirming `verify_chain()` catches it
-- All 11 Strands tools (`app/agent/tools.py`), each run directly against
-  the seeded demo data and confirmed to produce the exact outputs the
-  three demo scenarios need
-- Strands `Agent` assembly with system prompt, `structured_output_model`,
-  and an `InterventionHandler` that gates `resolve_dispute` and
-  `record_payment` behind human confirmation at the framework level
-  (`app/agent/intervention.py`) — built and verified against the real
-  Strands SDK's actual class signatures (`BeforeToolCallEvent`,
-  `Confirm`/`Deny`/`Proceed`), not guessed from memory
+## Status
 
-**Not yet run end-to-end:** the full agent loop (model reasoning → tool
-selection → intervention gate → structured decision output) has not been
-executed against a live model in this environment, because no AWS Bedrock
-access was available in the sandbox this was built in. Everything up to
-that boundary — every tool, every domain rule, the intervention handler's
-logic — is real code verified against the real SDK, not a mock. The one
-untested step is the model actually choosing to call these tools in the
-right order, which you should confirm as your first step once your Bedrock
-model access is approved. See "First run" below.
+**Built and verified:**
 
-**Not yet built:** Next.js frontend, seed data for the full 12-member
-disputed/resolved-dispute variety described in the spec (current seed
-covers the three critical demo scenarios only).
+* Full SQLAlchemy schema: Group, Member, Contribution, Payment, Dispute, ActionReceipt
+* Deterministic overdue calculation in `app/domain/overdue.py`
+* Deterministic evidence-conflict detection in `app/domain/disputes.py`
+* Hash-chained action receipts with tamper detection in `app/domain/receipts.py`
+* All 11 Strands tools tested directly against seeded demo data
+* Strands `Agent` assembly with system prompt, structured output, and human intervention gates for `resolve_dispute` and `record_payment`
+* Intervention handler verified against the real Strands SDK
+
+**Not yet run end-to-end:**
+
+The full agent loop, from model reasoning through tool selection, intervention, and structured output, has not been executed against a live model because AWS Bedrock access was unavailable in the build environment.
+
+Everything before that boundary is real, executable code verified against the real SDK. The remaining step is validating the model's tool selection and reasoning once Bedrock access is available.
+
 
 ## API
 
-FastAPI layer built and tested (via FastAPI's TestClient — real requests
-through real routes, not mocked):
-- `GET /groups/{id}`, `/groups/{id}/members`, `/groups/{id}/contributions`,
-  `/groups/{id}/disputes`, `/groups/{id}/receipts` — the five UI views
-- `GET /contributions/{id}` — single contribution + live overdue check
-- `POST /demo/submit-evidence` — deterministic evidence evaluation (Demo Mode button)
-- `POST /demo/run-agent-check` — the one endpoint that actually invokes the
-  Strands agent; everything else manipulates state directly so you don't
-  burn model calls setting up a scenario
-- `POST /demo/resume-run` — resumes a paused agent run after an interrupt
-  (agent itself attempted a gated tool)
-- `POST /disputes/{id}/resolve` — direct human-admin resolution, bypasses
-  the agent entirely (a human clicking Approve IS the human decision the
-  intervention gate is waiting for, not something that itself needs gating)
-- `POST /demo/reset` — wipes and reseeds Udo Ajo Circle
+FastAPI routes tested with real requests through FastAPI's `TestClient`:
 
-Run it:
+* `GET /groups/{id}` and related member, contribution, dispute, and receipt views
+* `GET /contributions/{id}` with live overdue evaluation
+* `POST /demo/submit-evidence` for deterministic evidence evaluation
+* `POST /demo/run-agent-check` to invoke the Strands agent
+* `POST /demo/resume-run` to resume an interrupted agent run
+* `POST /disputes/{id}/resolve` for direct human-admin resolution
+* `POST /demo/reset` to reset and reseed Udo Ajo Circle
+
+Run the server:
+
 ```powershell
 python -m app.run_server
 ```
-Then open http://localhost:8000/docs for interactive API docs.
 
-**Known simplification:** `/demo/resume-run` keeps paused agent runs in an
-in-memory dict keyed by run_id. Fine for a single-process demo; a real
-deployment would persist via Strands' session snapshot mechanism instead.
+API docs:
+
+`http://localhost:8000/docs`
+
+**Demo limitation:** `/demo/resume-run` stores paused runs in memory. This is suitable for a single-process demo; production deployment would use persistent Strands session snapshots.
 
 ## Setup
 
 ```bash
 python -m venv venv
-venv\Scripts\activate.bat        REM Windows cmd.exe
+venv\Scripts\activate.bat
 pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Edit `.env` with real values. The app loads it automatically (via
-`app/__init__.py`) — no need to `set` variables by hand in every session.
+Configure `.env` with the required values.
 
-**Model backend — use Bedrock, not a paid API key:**
-1. In the AWS console: Bedrock → Model access → enable a Claude model.
-   Approval can take anywhere from instant to a few hours, so do this
-   first, before anything else.
-2. The hackathon gives participants $50 in AWS credits — apply those to
-   the account you're using before this costs you anything out of pocket.
-3. Fill in `BEDROCK_MODEL_ID` + your AWS credentials in `.env`.
+### Model backend
 
-The `ANTHROPIC_API_KEY` fallback in `.env.example` exists only in case you
-ever want to test locally against Claude directly — Anthropic's API is
-paid per token, so skip it entirely and go straight to Bedrock. The agent
-never looks at that variable when `BEDROCK_MODEL_ID` is set.
+The intended model backend is AWS Bedrock.
 
-## First run
+1. Enable a Claude model in AWS Bedrock Model Access.
+2. Apply the hackathon's AWS credits to the account if applicable.
+3. Configure `BEDROCK_MODEL_ID` and AWS credentials in `.env`.
+
+`ANTHROPIC_API_KEY` is retained in `.env.example` only as an optional direct-Claude fallback. When `BEDROCK_MODEL_ID` is set, the agent uses Bedrock.
+
+## First Run
+
+Seed the demo database:
 
 ```powershell
 cd backend
 python -m app.seed
 ```
 
-Run it as a module (`-m app.seed`) from inside `backend/`, not by executing
-the `.py` file directly — `-m` automatically adds your current directory to
-Python's import path, which is what lets `from app.db import ...` resolve.
-Running the file by its path only puts `app/` itself on the path, not its
-parent, and you'll get `ModuleNotFoundError: No module named 'app'`.
+Run the module from `backend/` so Python resolves the `app` package correctly.
 
-This prints the group ID, member IDs, and the overdue contribution ID
-you'll use to drive the demo scenarios, plus the exact tool-call
-parameters for the conflicting-evidence scenario.
+The seed command prints the group ID, member IDs, overdue contribution ID, and parameters needed for the demo scenarios.
 
-Then, with `.env` filled in (Bedrock model access approved, credentials set):
+With Bedrock access configured:
 
 ```powershell
-python -m app.dev_test_live con_ebd82e30f4    # use YOUR contribution_id from seed output
+python -m app.dev_test_live <contribution_id>
 ```
 
-Strands prints tool calls and model output live as they happen (the SDK's
-default `PrintingCallbackHandler`) — no extra code needed to see the
-sequence. Watch for: does it call `calculate_overdue_status` before
-concluding anything, does it call `send_reminder` only if that came back
-`is_overdue=True`, does it call `create_action_receipt` afterward, and does
-the final `structured_output` block have all five fields populated.
+This runs the live Strands agent and prints tool calls and model output.
 
-## Why SQLite, not Postgres/Supabase
+For the overdue scenario, verify that the agent:
 
-So a judge can clone the repo and run it with zero external accounts or
-Docker. The schema is plain SQLAlchemy ORM — swap `DATABASE_URL` to a
-Postgres connection string and nothing else changes.
+1. Checks overdue status
+2. Sends a reminder only when `is_overdue=True`
+3. Creates an action receipt
+4. Produces the expected structured output
+
+## Why SQLite
+
+SQLite keeps the demo self-contained, so judges can clone and run it without Docker or an external database.
+
+The application uses standard SQLAlchemy ORM. `DATABASE_URL` can be changed to a Postgres connection string without changing the domain model.
 
 ## Architecture
 
-```
+```text
 Member message / event
         |
-   Strands Agent (system prompt + tools)
+   Strands Agent
+   (prompt + tools)
         |
-   InterventionHandler.before_tool_call
-        |  (Confirm required for resolve_dispute, record_payment)
-        v
-   Tool call (app/agent/tools.py)
+ InterventionHandler
         |
-   Deterministic domain logic (app/domain/*)
+   Human confirmation
         |
-   SQLite/Postgres (source of truth)
+     Tool call
+ app/agent/tools.py
         |
-   create_action_receipt -> hash-chained, inspectable log
+ Deterministic domain logic
+     app/domain/*
+        |
+ SQLite / Postgres
+  source of truth
+        |
+ Action receipt
+ hash-chained audit log
 ```
